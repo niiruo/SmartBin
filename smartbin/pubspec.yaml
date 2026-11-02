@@ -37,6 +37,7 @@ dependencies:
   sqflite: ^2.4.5
   path: ^1.9.1
   crypto: ^3.0.7
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:

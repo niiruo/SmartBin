@@ -20,7 +20,7 @@ class SbImage extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) =>
+        errorBuilder: (_, _, _) =>
             Icon(fallback, size: size, color: SB.text),
       );
 }

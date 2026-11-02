@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../app_state.dart';
 import '../db/repository.dart';
+import '../services/google_auth.dart';
+import '../theme.dart';
 import 'widgets.dart';
 
 final _app = AppState.instance;
@@ -47,6 +49,21 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Needs internet only for this step. Creates the account on first use.
+  Future<void> _google() async {
+    setState(() => _busy = true);
+    try {
+      final g = await GoogleAuthService.signIn();
+      final user = await _app.repo.signInWithGoogle(
+          googleId: g.id, email: g.email, displayName: g.name);
+      await _app.setUser(user); // root widget switches to the dashboard
+    } on AppException catch (e) {
+      if (mounted) snack(context, e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AuthScaffold(
@@ -83,6 +100,21 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 28),
         SbButton(label: 'Login', onPressed: _login, loading: _busy),
+        const SizedBox(height: 16),
+        Row(children: const [
+          Expanded(child: Divider(color: SB.border)),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10),
+            child: Text('or', style: TextStyle(color: SB.muted, fontSize: 12)),
+          ),
+          Expanded(child: Divider(color: SB.border)),
+        ]),
+        const SizedBox(height: 16),
+        SbButton(
+            label: 'Continue with Google',
+            color: SB.container,
+            onPressed: _google,
+            loading: _busy),
         const SizedBox(height: 28),
         const Text('If you are creating a new account,\nTerms & Conditions and Privacy Policy will apply.',
             textAlign: TextAlign.center,

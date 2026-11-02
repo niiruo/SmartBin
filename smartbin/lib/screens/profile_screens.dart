@@ -132,8 +132,9 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 6),
               _row(context, 'Personal details',
                   () => _push(context, const PersonalDetailsScreen())),
-              _row(context, 'Password & Security',
-                  () => _push(context, const ChangePasswordScreen())),
+              if (u.hasPassword)
+                _row(context, 'Password & Security',
+                    () => _push(context, const ChangePasswordScreen())),
               _row(context, 'Log out', () => _confirmLogout(context),
                   color: SB.red),
               _row(context, 'Delete account',
@@ -393,8 +394,13 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
   }
 
   Future<void> _delete() async {
-    if (_password.text.isEmpty) {
+    final needsPassword = _app.user?.hasPassword ?? true;
+    if (needsPassword && _password.text.isEmpty) {
       snack(context, 'Enter your password to confirm.');
+      return;
+    }
+    if (!needsPassword && _password.text.trim() != 'DELETE') {
+      snack(context, 'Type DELETE to confirm.');
       return;
     }
     final nav = Navigator.of(context);
@@ -435,8 +441,10 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
         const SizedBox(height: 18),
         SbField(
           controller: _password,
-          hint: 'Enter your password:',
-          obscure: true,
+          hint: (_app.user?.hasPassword ?? true)
+              ? 'Enter your password:'
+              : 'Type DELETE to confirm:',
+          obscure: _app.user?.hasPassword ?? true,
           textInputAction: TextInputAction.done,
           onSubmitted: _delete,
         ),

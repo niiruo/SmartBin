@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'db/repository.dart';
+import 'services/google_auth.dart';
 
 /// Tiny app-wide state holder (no extra packages needed).
 class AppState extends ChangeNotifier {
@@ -43,6 +44,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> logOut() async {
     await repo.logOut();
+    await GoogleAuthService.signOut();
     user = null;
     await _load();
     notifyListeners();

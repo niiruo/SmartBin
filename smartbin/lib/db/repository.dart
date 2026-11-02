@@ -23,6 +23,8 @@ class AppUser {
     required this.lastName,
     required this.email,
     required this.phone,
+    this.googleId,
+    this.hasPassword = true,
   });
 
   final int id;
@@ -30,6 +32,12 @@ class AppUser {
   final String lastName;
   final String email;
   final String phone;
+  final String? googleId;
+
+  /// false for accounts created with Google only.
+  final bool hasPassword;
+
+  bool get isGoogle => googleId != null;
 
   String get fullName => '$firstName $lastName'.trim();
 
@@ -39,6 +47,8 @@ class AppUser {
         lastName: m['last_name'] as String,
         email: m['email'] as String,
         phone: m['phone'] as String,
+        googleId: m['google_id'] as String?,
+        hasPassword: (m['password_hash'] as String).isNotEmpty,
       );
 }
 
@@ -173,6 +183,10 @@ class Repository {
     final d = await _db;
     final rows = await d.query('users',
         where: 'email = ?', whereArgs: [_cleanEmail(email)]);
+    if (rows.isNotEmpty && (rows.first['password_hash'] as String).isEmpty) {
+      throw AppException(
+          'This account uses Google sign-in. Tap "Continue with Google".');
+    }
     if (rows.isEmpty ||
         _hash(password, rows.first['salt'] as String) !=
             rows.first['password_hash']) {
@@ -181,6 +195,63 @@ class Repository {
     final user = AppUser.fromMap(rows.first);
     await _setKv(d, 'session_user_id', '${user.id}');
     return user;
+  }
+
+  /// Google sign-in: find the account (by Google id, then by email) or
+  /// create one. The email is verified by Google, so an existing
+  /// email/password account with the same address is linked, not duplicated.
+  Future<AppUser> signInWithGoogle({
+    required String googleId,
+    required String email,
+    required String displayName,
+  }) async {
+    final d = await _db;
+    final cleanEmail = _cleanEmail(email);
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    var rows =
+        await d.query('users', where: 'google_id = ?', whereArgs: [googleId]);
+    if (rows.isEmpty) {
+      rows =
+          await d.query('users', where: 'email = ?', whereArgs: [cleanEmail]);
+      if (rows.isNotEmpty) {
+        await d.update('users', {'google_id': googleId},
+            where: 'id = ?', whereArgs: [rows.first['id']]);
+      }
+    }
+
+    int id;
+    if (rows.isNotEmpty) {
+      id = rows.first['id'] as int;
+    } else {
+      final parts = displayName.trim().split(RegExp(r'\s+'));
+      final first = parts.first.isEmpty ? cleanEmail.split('@').first : parts.first;
+      final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+      id = await d.transaction((txn) async {
+        final newId = await txn.insert('users', {
+          'first_name': first,
+          'last_name': last,
+          'email': cleanEmail,
+          'phone': '',
+          'password_hash': '',
+          'salt': '',
+          'google_id': googleId,
+          'created_at': now,
+        });
+        if (kStartingPoints > 0) {
+          await txn.insert('transactions', {
+            'user_id': newId,
+            'kind': 'bonus',
+            'amount': kStartingPoints,
+            'note': 'Welcome bonus',
+            'created_at': now,
+          });
+        }
+        return newId;
+      });
+    }
+    await _setKv(d, 'session_user_id', '$id');
+    return (await _userById(d, id))!;
   }
 
   Future<void> logOut() async {
@@ -201,9 +272,15 @@ class Repository {
   Future<void> resetPasswordByEmail(String email, String newPassword) async {
     final d = await _db;
     final rows = await d.query('users',
-        columns: ['id'], where: 'email = ?', whereArgs: [_cleanEmail(email)]);
+        columns: ['id', 'password_hash'],
+        where: 'email = ?',
+        whereArgs: [_cleanEmail(email)]);
     if (rows.isEmpty) {
       throw AppException('No account on this device uses that email.');
+    }
+    if ((rows.first['password_hash'] as String).isEmpty) {
+      throw AppException(
+          'This account uses Google sign-in, so there is no password to reset.');
     }
     await changePassword(rows.first['id'] as int, newPassword);
   }
@@ -322,8 +399,10 @@ class Repository {
     final d = await _db;
     final rows = await d.query('users', where: 'id = ?', whereArgs: [userId]);
     if (rows.isEmpty) throw AppException('Account not found.');
-    if (_hash(password, rows.first['salt'] as String) !=
-        rows.first['password_hash']) {
+    final hasPassword = (rows.first['password_hash'] as String).isNotEmpty;
+    if (hasPassword &&
+        _hash(password, rows.first['salt'] as String) !=
+            rows.first['password_hash']) {
       throw AppException('Incorrect password.');
     }
     await d.transaction((txn) async {

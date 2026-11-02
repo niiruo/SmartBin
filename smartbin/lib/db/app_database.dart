@@ -14,7 +14,7 @@ class AppDatabase {
     final path = join(await getDatabasesPath(), 'smartbin.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -31,8 +31,11 @@ class AppDatabase {
         phone         TEXT NOT NULL DEFAULT '',
         password_hash TEXT NOT NULL,
         salt          TEXT NOT NULL,
+        google_id     TEXT,
         created_at    INTEGER NOT NULL
       )''');
+    await db.execute(
+        'CREATE UNIQUE INDEX idx_users_google ON users(google_id)');
 
     // One row per points change. Balance = SUM(amount).
     // `code` is UNIQUE, so a bin code can only ever be redeemed once.
@@ -78,6 +81,12 @@ class AppDatabase {
       await db.execute('''
         INSERT OR IGNORE INTO used_codes (code, used_at)
         SELECT code, created_at FROM transactions WHERE code IS NOT NULL''');
+    }
+    if (oldVersion < 3) {
+      // Google accounts: google_id is NULL for email/password accounts.
+      await db.execute('ALTER TABLE users ADD COLUMN google_id TEXT');
+      await db.execute(
+          'CREATE UNIQUE INDEX idx_users_google ON users(google_id)');
     }
   }
 

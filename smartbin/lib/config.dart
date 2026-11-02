@@ -15,3 +15,5 @@ const Duration kLockoutDuration = Duration(minutes: 5);
 
 /// Coupons offered on the dashboard.
 const List<int> kCouponCosts = [20, 50];
+
+const String kGoogleWebClientId = '587226057379-q5l6kufhan9opqtcf1i8d407b4al6crq.apps.googleusercontent.com';
